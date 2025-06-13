@@ -1,58 +1,50 @@
+from flask import Flask, request, jsonify
 from diffusers import StableDiffusionPipeline
 import torch
-import matplotlib.pyplot as plt
+import io
+from PIL import Image
+import base64
 
-def generate_images(prompt, num_images=4):
-    # Check for GPU availability
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"Using device: {device}")
+# Create Flask app 👇
+app = Flask(__name__)
+
+# Load model once
+device = "cuda" if torch.cuda.is_available() else "cpu"
+pipe = StableDiffusionPipeline.from_pretrained(
+    "runwayml/stable-diffusion-v1-5",
+    torch_dtype=torch.float32,
+    safety_checker=None
+).to(device)
+pipe.enable_attention_slicing()
+
+@app.route("/")
+def home():
+    return "🚀 Stable Diffusion API is running!"
+
+@app.route("/generate", methods=["POST"])
+def generate():
+    data = request.get_json()
+    prompt = data.get("prompt", "a fantasy landscape")
+    num_images = int(data.get("num_images", 1))
 
     try:
-        # Load the model (will download ~2GB on first run)
-        print("Loading model...")
-        pipe = StableDiffusionPipeline.from_pretrained(
-            "runwayml/stable-diffusion-v1-5",
-            torch_dtype=torch.float32,  # Uses less memory
-            safety_checker=None  # Disable safety checker for more variety
-        )
-        pipe = pipe.to(device)
-        
-        # Optimize for low-memory systems
-        pipe.enable_attention_slicing()
-        
-        print("Generating images...")
-        # Generate images
-        images = pipe(
-            prompt,
-            num_images_per_prompt=num_images,
-            height=512,
-            width=512
-        ).images
+        result = pipe(prompt, num_images_per_prompt=num_images)
+        images = result.images
 
-        # Display images
-        fig, axes = plt.subplots(1, num_images, figsize=(20, 5))
-        if num_images == 1:
-            axes = [axes]  # Handle single image case
-            
-        for i, img in enumerate(images):
-            axes[i].imshow(img)
-            axes[i].axis('off')
-            axes[i].set_title(f"Image {i+1}")
-        
-        plt.tight_layout()
-        plt.show()
-        
-        return images
-        
+        # Convert images to base64 strings
+        encoded_images = []
+        for img in images:
+            buf = io.BytesIO()
+            img.save(buf, format='PNG')
+            img_bytes = buf.getvalue()
+            encoded = base64.b64encode(img_bytes).decode('utf-8')
+            encoded_images.append(encoded)
+
+        return jsonify({"images": encoded_images})
+
     except Exception as e:
-        print(f"Error: {e}")
-        return None
+        return jsonify({"error": str(e)}), 500
 
-# Example usage
+# Needed for Gunicorn on Render
 if __name__ == "__main__":
-    prompt = "a supercar at high speed on track, high quality"
-    generated_images = generate_images(prompt, num_images=1)
-    
-    # To save images:
-    # for i, img in enumerate(generated_images):
-    #     img.save(f"generated_image_{i}.png")
+    app.run(host="0.0.0.0", port=10000)  # Use any port for local
