@@ -9,6 +9,7 @@
         input, textarea, button { width: 100%; padding: 10px; margin-top: 10px; }
         img { max-width: 45%; margin: 10px; border-radius: 10px; box-shadow: 0 0 10px #ccc; }
         .gallery { display: flex; flex-wrap: wrap; gap: 10px; }
+        .error { color: red; margin-top: 20px; }
     </style>
 </head>
 <body>
@@ -30,9 +31,13 @@
     <h2>🖼️ Generated Images:</h2>
     <div class="gallery">
         {% for img in images %}
-            <img src="{{ url_for('send_image', filename=img) }}" alt="Generated Image">
+            <img src="data:image/png;base64,{{ img }}" alt="Generated Image">
         {% endfor %}
     </div>
+    {% endif %}
+
+    {% if error %}
+        <p class="error">⚠️ Error: {{ error }}</p>
     {% endif %}
 </body>
 </html>
